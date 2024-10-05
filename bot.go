@@ -2,6 +2,7 @@ package openwechatpp
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	ow "github.com/eatmoreapple/openwechat"
@@ -11,33 +12,33 @@ type Dispatcher struct {
 	Commands []*Command
 }
 
-func (e *Dispatcher) AsMessageHandler() ow.MessageHandler {
+func (d *Dispatcher) AsMessageHandler() ow.MessageHandler {
 	return func(msg *ow.Message) {
-		e.HandleMessage(msg)
+		d.HandleMessage(msg)
 	}
 }
 
-func (e *Dispatcher) AddCommand(cmd Command) {
+func (d *Dispatcher) AddCommand(cmd Command) {
 	if err := cmd.CheckAvailability(); err != nil {
 		panic(fmt.Sprintf("command is unavailable because %s", err.Error()))
 	}
-	e.Commands = append(e.Commands, &cmd)
+	d.Commands = append(d.Commands, &cmd)
 }
 
-func (e *Dispatcher) HandleMessage(msg *ow.Message) {
-	for i, cmd := range e.Commands {
+func (d *Dispatcher) HandleMessage(msg *ow.Message) {
+	for i, cmd := range d.Commands {
 		if !cmd.Filter(msg) {
 			continue
 		}
 		go cmd.Handler(msg)
 		if cmd.IsOnce {
-			e.Commands = append(e.Commands[:i], e.Commands[i+1:]...)
+			d.Commands = append(d.Commands[:i], d.Commands[i+1:]...)
 		}
 		return
 	}
 }
 
-func (e *Dispatcher) AwaitMatchingMessage(filter Filter, maxWaitingTime time.Duration) (*ow.Message, error) {
+func (d *Dispatcher) AwaitMatchingMessage(filter Filter, maxWaitingTime time.Duration) (*ow.Message, error) {
 	ch := make(chan *ow.Message, 1)
 	timer := make(chan interface{}, 1)
 
@@ -55,7 +56,7 @@ func (e *Dispatcher) AwaitMatchingMessage(filter Filter, maxWaitingTime time.Dur
 		},
 	}
 
-	e.Commands = append([]*Command{newCmd}, e.Commands...)
+	d.Commands = append([]*Command{newCmd}, d.Commands...)
 
 	select {
 	case msg := <-ch:
@@ -66,10 +67,22 @@ func (e *Dispatcher) AwaitMatchingMessage(filter Filter, maxWaitingTime time.Dur
 }
 
 // 等待给定msg的发送者的下一条消息直到超出maxInputTime
-func (e *Dispatcher) WaitForNext(msg *ow.Message, maxInputTime time.Duration) (*ow.Message, error) {
+func (d *Dispatcher) WaitForNext(msg *ow.Message, maxInputTime time.Duration) (*ow.Message, error) {
 	sameOriginFilter, err := ConstructSameOriginFilter(msg)
 	if err != nil {
 		return nil, err
 	}
-	return e.AwaitMatchingMessage(sameOriginFilter, maxInputTime)
+	return d.AwaitMatchingMessage(sameOriginFilter, maxInputTime)
+}
+
+// 输出帮助信息
+// 格式如下：
+// 【命令名】说明
+// 【命令名】说明
+func (d *Dispatcher) HelpText() string {
+	builder := strings.Builder{}
+	for _, cmd := range d.Commands {
+		builder.WriteString(fmt.Sprintf("【%s】%s\n", cmd.Name, cmd.Usage))
+	}
+	return builder.String()
 }

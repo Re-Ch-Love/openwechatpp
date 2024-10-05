@@ -1,6 +1,8 @@
 package openwechatpp
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 
 	ow "github.com/eatmoreapple/openwechat"
@@ -29,12 +31,31 @@ func AcceptSamePrefix(prefix string) Filter {
 
 func AcceptSameContent(content string) Filter {
 	return func(msg *ow.Message) bool {
+		if !msg.IsText() {
+			return false
+		}
 		return msg.Content == content
 	}
 }
 
-func AcceptRegexMatching(regex string) Filter {
-	panic("TODO")
+func AcceptRegexMatching(pattern string) Filter {
+	rep := regexp.MustCompile(pattern)
+	return func(msg *ow.Message) bool {
+		if !msg.IsText() {
+			return false
+		}
+		return rep.Match([]byte(msg.Content))
+	}
+}
+
+func AcceptAt(name string) Filter {
+	atContent := fmt.Sprintf("@%s\u2005", name)
+	return func(msg *ow.Message) bool {
+		if !msg.IsText() {
+			return false
+		}
+		return strings.Contains(msg.Content, atContent)
+	}
 }
 
 func extractSenderInfo(msg *ow.Message) (groupId string, userId string, err error) {
